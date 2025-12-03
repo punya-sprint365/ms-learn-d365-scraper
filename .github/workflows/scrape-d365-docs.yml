@@ -17,6 +17,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm install
@@ -42,10 +43,10 @@ jobs:
         run: |
           curl -v http://localhost:3000/scrape-all -o latest-scrape.csv
 
-      - name: Check results
+      - name: Verify CSV created
         run: |
           if [ -f latest-scrape.csv ]; then
-            echo "✅ CSV created successfully"
+            echo "✅ CSV file created successfully"
             wc -l latest-scrape.csv
             head -n 5 latest-scrape.csv
           else
@@ -68,8 +69,20 @@ jobs:
 
       - name: Commit latest CSV to repo
         run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
-          git add latest-scrape.csv
-          git commit -m "📊 Update D365 latest scrape - $(date +%Y-%m-%d)" || echo "No changes"
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+
+          # Ensure we’re on the correct branch (normally main)
+          git checkout ${{ github.ref_name }}
+
+          # Stage all CSV changes
+          git add -A
+
+          # Commit (don’t error if nothing changed)
+          git commit -m "Update latest D365 docs scrape - $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
+
+          # Sync, avoid push conflicts
+          git pull --rebase || true
+
+          # Push to repo
           git push || echo "Nothing to push"
