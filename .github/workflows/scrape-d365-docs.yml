@@ -1,5 +1,8 @@
 name: Scrape D365 Documentation
 
+permissions:
+  contents: write
+
 on:
   repository_dispatch:
     types: [scrape-docs]
@@ -46,11 +49,9 @@ jobs:
       - name: Verify CSV created
         run: |
           if [ -f latest-scrape.csv ]; then
-            echo "✅ CSV file created successfully"
-            wc -l latest-scrape.csv
-            head -n 5 latest-scrape.csv
+            echo "CSV OK"
           else
-            echo "❌ CSV not found"
+            echo "CSV missing"
             exit 1
           fi
 
@@ -72,17 +73,18 @@ jobs:
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
 
-          # Ensure correct branch
-          git checkout ${{ github.ref_name }}
+          # Detect branch (yours = main)
+          BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          echo "Active branch: $BRANCH"
 
-          # Stage CSV
-          git add latest-scrape.csv
+          # Add CSV
+          git add latest-scrape.csv || echo "File not found"
 
           # Commit if changed
-          git commit -m "Update latest scrape $(date)" || echo "No changes to commit"
+          git commit -m "Update latest scrape $(date)" || true
 
-          # Avoid conflicts
-          git pull --rebase || true
+          # Protect against conflicts
+          git pull origin $BRANCH --rebase || true
 
-          # Push the commit
-          git push || echo "Nothing to push"
+          # Push update
+          git push origin $BRANCH || echo "Push failed"
