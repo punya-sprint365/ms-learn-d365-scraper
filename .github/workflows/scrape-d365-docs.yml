@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for comparison
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -42,16 +44,16 @@ jobs:
             sleep 2
           done
 
-      - name: Trigger scraping
+      - name: Trigger scraping → create latest CSV
         run: |
-          curl -v http://localhost:3000/scrape-all -o latest-scrape.csv
+          curl -s http://localhost:3000/scrape-all -o latest-scrape.csv
 
-      - name: Verify CSV created
+      - name: Verify CSV exists
         run: |
           if [ -f latest-scrape.csv ]; then
-            echo "CSV OK"
+            echo "CSV generated successfully."
           else
-            echo "CSV missing"
+            echo "CSV missing!"
             exit 1
           fi
 
@@ -61,30 +63,63 @@ jobs:
           if [ -f server.pid ]; then kill $(cat server.pid) || true; fi
           pkill -f "node server.js" || true
 
-      - name: Upload CSV as artifact
+      - name: Prepare history folder
+        run: |
+          mkdir -p history
+          # Copy current CSV into history folder with timestamped name
+          cp latest-scrape.csv history/scrape_$(date +"%Y_%m_%d_%H_%M").csv
+
+      - name: Keep only last 5 history files
+        run: |
+          cd history
+          # List newest first, delete everything after 5
+          ls -t | sed -e '1,5d' | xargs -r rm -f
+
+      - name: Generate comparison report
+        run: |
+          if [ $(ls history | wc -l) -ge 2 ]; then
+            NEW=latest-scrape.csv
+            OLD=$(ls -t history | sed -n '2p')
+
+            echo "Comparing latest run against: $OLD"
+
+            # Added URLs
+            echo "### Added URLs" > comparison.txt
+            comm -23 <(cut -d',' -f2 "$NEW" | sort) <(cut -d',' -f2 "history/$OLD" | sort) >> comparison.txt
+
+            # Removed URLs
+            echo "" >> comparison.txt
+            echo "### Removed URLs" >> comparison.txt
+            comm -13 <(cut -d',' -f2 "$NEW" | sort) <(cut -d',' -f2 "history/$OLD" | sort) >> comparison.txt
+
+            # Changed dates
+            echo "" >> comparison.txt
+            echo "### Changed LastUpdated" >> comparison.txt
+            join -1 1 -2 1 \
+              <(cut -d',' -f2,3 "$NEW" | sed 's/"//g' | sort) \
+              <(cut -d',' -f2,3 "history/$OLD" | sed 's/"//g' | sort) \
+              | awk -F',' '$3 != $4' >> comparison.txt
+          else
+            echo "Not enough history files to compare." > comparison.txt
+          fi
+
+      - name: Upload results as artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: d365-latest
-          path: latest-scrape.csv
-          retention-days: 90
+          name: d365-scrape-results
+          path: |
+            latest-scrape.csv
+            comparison.txt
+            history/
+          retention-days: 30
 
-      - name: Commit latest CSV to repo
+      - name: Commit CSV + history + comparison
         run: |
-          git config --global user.name "GitHub Actions Bot"
-          git config --global user.email "actions@github.com"
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
 
-          # Detect branch (yours = main)
-          BRANCH=$(git rev-parse --abbrev-ref HEAD)
-          echo "Active branch: $BRANCH"
+          git add latest-scrape.csv history comparison.txt || true
+          git commit -m "D365 scrape update $(date)" || echo "No changes to commit"
 
-          # Add CSV
-          git add latest-scrape.csv || echo "File not found"
-
-          # Commit if changed
-          git commit -m "Update latest scrape $(date)" || true
-
-          # Protect against conflicts
-          git pull origin $BRANCH --rebase || true
-
-          # Push update
-          git push origin $BRANCH || echo "Push failed"
+          git pull --rebase || true
+          git push || echo "Push failed"
