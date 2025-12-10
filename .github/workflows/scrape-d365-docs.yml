@@ -29,7 +29,7 @@ jobs:
 
       - name: Start server in background
         run: |
-          node server.js > server.log 2>&1 &
+          node server.js > server.log 2>&1 & 
           echo $! > server.pid
           sleep 5
 
@@ -66,16 +66,14 @@ jobs:
       - name: Prepare history folder
         run: |
           mkdir -p history
-          # Copy current CSV into history folder with timestamped name
           cp latest-scrape.csv history/scrape_$(date +"%Y_%m_%d_%H_%M").csv
 
       - name: Keep only last 5 history files
         run: |
           cd history
-          # List newest first, delete everything after 5
           ls -t | sed -e '1,5d' | xargs -r rm -f
 
-      - name: Generate comparison report
+      - name: Generate comparison report (clean + accurate)
         run: |
           if [ $(ls history | wc -l) -ge 2 ]; then
             NEW=latest-scrape.csv
@@ -83,22 +81,37 @@ jobs:
 
             echo "Comparing latest run against: $OLD"
 
-            # Added URLs
+            ### ------------------------------
+            ### Added URLs
+            ### ------------------------------
             echo "### Added URLs" > comparison.txt
             comm -23 <(cut -d',' -f2 "$NEW" | sort) <(cut -d',' -f2 "history/$OLD" | sort) >> comparison.txt
 
-            # Removed URLs
+            ### ------------------------------
+            ### Removed URLs
+            ### ------------------------------
             echo "" >> comparison.txt
             echo "### Removed URLs" >> comparison.txt
             comm -13 <(cut -d',' -f2 "$NEW" | sort) <(cut -d',' -f2 "history/$OLD" | sort) >> comparison.txt
 
-            # Changed dates
+            ### ------------------------------
+            ### Changed LastUpdated (REAL changes only)
+            ### ------------------------------
             echo "" >> comparison.txt
             echo "### Changed LastUpdated" >> comparison.txt
-            join -1 1 -2 1 \
-              <(cut -d',' -f2,3 "$NEW" | sed 's/"//g' | sort) \
-              <(cut -d',' -f2,3 "history/$OLD" | sed 's/"//g' | sort) \
-              | awk -F',' '$3 != $4' >> comparison.txt
+
+            join -t',' -1 1 -2 1 \
+              <(cut -d',' -f2,3 "$NEW" | sed 's/"//g' | sort -t',' -k1,1) \
+              <(cut -d',' -f2,3 "history/$OLD" | sed 's/"//g' | sort -t',' -k1,1) \
+              | awk -F',' '{
+                  url=$1;
+                  new=$2;
+                  old=$3;
+                  # Only show real Microsoft updates
+                  if (new != old && new != "" && old != "" && new != "UNKNOWN" && old != "UNKNOWN")
+                    printf "%s   %s → %s\n", url, old, new;
+                }' >> comparison.txt
+
           else
             echo "Not enough history files to compare." > comparison.txt
           fi
