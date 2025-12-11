@@ -18,7 +18,7 @@ It reads URLs from `urls.txt`, crawls each page (including sidebar links), extra
 - Follows sidebar navigation links automatically
 - Deduplicates URLs
 - Exports results as a CSV
-- Fully Docker-ready
+
 
 ---
 
@@ -48,10 +48,7 @@ MS-SCRAPER-D365/
    npm install
 
 
-Running with Docker
-- docker build -t ms-d365-scraper .
-- docker run -p 3000:3000 ms-d365-scraper
-trigger scrapping - http://localhost:3000/scrape-all
+
 
 
 
