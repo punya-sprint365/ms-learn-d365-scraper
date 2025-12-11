@@ -2083,4 +2083,3 @@
  update    and send a project quotation →  or uninstall Traceability (preview)
  warehouse not mandatory   https://learn.microsoft.com/en-us/dynamics365/supply-chain/master-planning/master-plan-site-warehouse-coverage-warehouse-not-mandatory → https://learn.microsoft.com/en-us/dynamics365/supply-chain/master-planning/master-plan-site-coverage-warehouse-not-mandatory
  warehouse not mandatory   https://learn.microsoft.com/en-us/dynamics365/supply-chain/master-planning/master-plan-site-coverage-warehouse-not-mandatory → https://learn.microsoft.com/en-us/dynamics365/supply-chain/master-planning/master-plan-site-warehouse-coverage-warehouse-not-mandatory
-https://learn.microsoft.com/en-us/dynamics365/finance/accounts-payable/auto-vendr-invc-process   12/21/2024 → 12/11/2025
