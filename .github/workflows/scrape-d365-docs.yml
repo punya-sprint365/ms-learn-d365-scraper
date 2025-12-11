@@ -16,7 +16,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Needed for comparison
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -73,33 +73,21 @@ jobs:
           cd history
           ls -t | sed -e '1,5d' | xargs -r rm -f
 
-      - name: Generate comparison report (clean + accurate)
+      - name: Generate comparison report
         run: |
           if [ $(ls history | wc -l) -ge 2 ]; then
             NEW=latest-scrape.csv
             OLD=$(ls -t history | sed -n '2p')
 
-            echo "Comparing latest run against: $OLD"
-
-            ### ------------------------------
-            ### Added URLs
-            ### ------------------------------
             echo "### Added URLs" > comparison.txt
             comm -23 <(cut -d',' -f2 "$NEW" | sort) <(cut -d',' -f2 "history/$OLD" | sort) >> comparison.txt
 
-            ### ------------------------------
-            ### Removed URLs
-            ### ------------------------------
             echo "" >> comparison.txt
             echo "### Removed URLs" >> comparison.txt
             comm -13 <(cut -d',' -f2 "$NEW" | sort) <(cut -d',' -f2 "history/$OLD" | sort) >> comparison.txt
 
-            ### ------------------------------
-            ### Changed LastUpdated
-            ### ------------------------------
             echo "" >> comparison.txt
             echo "### Changed LastUpdated" >> comparison.txt
-
             join -t',' -1 1 -2 1 \
               <(cut -d',' -f2,3 "$NEW" | sed 's/"//g' | sort -t',' -k1,1) \
               <(cut -d',' -f2,3 "history/$OLD" | sed 's/"//g' | sort -t',' -k1,1) \
@@ -110,44 +98,23 @@ jobs:
                   if (new != old && new != "" && old != "" && new != "UNKNOWN" && old != "UNKNOWN")
                     printf "%s   %s → %s\n", url, old, new;
                 }' >> comparison.txt
-
           else
             echo "Not enough history files to compare." > comparison.txt
           fi
 
-      - name: Upload results as artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: d365-scrape-results
-          path: |
-            latest-scrape.csv
-            comparison.txt
-            history/
-          retention-days: 30
+      - name: Install zip utility
+        run: sudo apt-get install -y zip
 
-      - name: Commit CSV + history + comparison
+      - name: Create release ZIP
         run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
+          zip -r d365-scrape-results.zip latest-scrape.csv comparison.txt history/
 
-          git add latest-scrape.csv history comparison.txt || true
-          git commit -m "D365 scrape update $(date)" || echo "No changes to commit"
-
-          git pull --rebase || true
-          git push || echo "Push failed"
-
-
-      ###########################################################
-      # ⭐ NEW BLOCK — PUBLISH LATEST RESULTS TO GITHUB RELEASE
-      ###########################################################
       - name: Create/Update GitHub Release (latest)
         uses: softprops/action-gh-release@v1
         with:
           tag_name: latest
           name: Latest D365 Scrape Results
-          body: "Most recent scrape automatically published."
-          files: |
-            latest-scrape.csv
-            comparison.txt
+          body: "Packaged ZIP of latest scrape, comparison, and history."
+          files: d365-scrape-results.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
